@@ -1,0 +1,82 @@
+# Example topic registry — the only hand-written file a project needs besides
+# its trees.  `bteng-mqtt discover` can generate the `topics:` section from live
+# broker traffic, but its type guesses must be reviewed by a human: MQTT has no
+# information model.
+#
+# This file is loaded by the test suite, so it is always a valid example.
+
+broker:
+  host: 127.0.0.1
+  port: 1883
+  client_id: bteng-example
+  keepalive: 60
+  username: ""
+  password: ""
+  clean_session: true
+  protocol: mqtt311        # mqtt311 | mqtt31 | mqtt5
+  timeout: 10.0            # seconds to wait for CONNACK
+  # tls: true              # or a mapping: ca_certs / certfile / keyfile / insecure
+  will:                    # published by the broker if this client vanishes
+    topic: bteng/status
+    payload: offline
+    retain: true
+
+topics:
+  # Plain scalar payloads.
+  - alias: temperature
+    topic: factory/line1/sensor/temp
+    payload_type: float
+    qos: 1
+    description: cell temperature in °C
+
+  - alias: part_count
+    topic: factory/line1/counter/parts
+    payload_type: int
+    qos: 1
+
+  - alias: estop
+    topic: factory/line1/safety/estop
+    payload_type: bool
+    qos: 1
+    description: "true/1/on/yes all read as True"
+
+  # JSON payload, one field extracted so the tree never parses anything.
+  - alias: robot_mode
+    topic: factory/line1/robot/state
+    payload_type: json
+    json_path: status.mode
+    qos: 1
+
+  # Publishing: value_map lets a tree say value="start" and send real JSON.
+  - alias: conveyor_cmd
+    topic: factory/line1/conveyor/cmd
+    payload_type: json
+    qos: 1
+    retain: false
+    value_map:
+      start: '{"cmd": "start", "speed": 1.0}'
+      stop:  '{"cmd": "stop"}'
+
+  # Subscribe-only aliases: wildcards are legal here, and rejected for publishing.
+  - alias: any_sensor
+    topic: factory/line1/sensor/+
+    payload_type: float
+
+  # One subscription that primes the latest-value cache for the whole line, so
+  # MqttBatchRead and MqttCondition have something to read.
+  - alias: line1_all
+    topic: factory/line1/#
+    payload_type: string
+
+  # Request/response pair — the OpcUaCallMethod analog.
+  - alias: calibrate
+    topic: factory/line1/robot/req/calibrate
+    payload_type: json
+    response_topic: factory/line1/robot/res/calibrate
+    response_payload_type: json
+    timeout: 10.0
+
+# Optional seeds written to the blackboard before each tree runs; `--bb KEY=VALUE`
+# overrides a key.
+blackboard:
+  target_speed: 1.5

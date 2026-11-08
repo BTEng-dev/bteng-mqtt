@@ -1,0 +1,38 @@
+# Discovery spec — the hand-written input to `bteng-mqtt discover`.
+#
+#     bteng-mqtt discover -s examples/config/discover.yaml -o config/mqtt_config.yaml
+#
+# It says where to listen and for how long. Everything else — topic list, payload
+# types, aliases — is inferred from the traffic seen during that window.
+#
+# This is NOT the OPC UA harvest equivalent in reliability: MQTT has no
+# information model, so a quiet topic is invisible and a type is only ever a
+# guess from the samples that happened to arrive. Read the generated file.
+
+broker:
+  host: 127.0.0.1
+  port: 1883
+  username: ""
+  password: ""
+  timeout: 10.0
+
+# Listen to everything under a prefix rather than "#" when the broker is busy —
+# a shorter window then still covers what you care about.
+filters:
+  - factory/line1/#
+
+# How long to listen. Long enough that every topic publishes at least once:
+# a 30s cycle time needs more than 30s here.
+duration: 20.0
+
+qos: 0
+
+# Topics the sniff should skip entirely.
+exclude:
+  - $SYS/#
+
+# Pin the aliases that matter; the rest are derived from the last topic level
+# (snake_cased, with parent levels prepended on a collision).
+aliases:
+  factory/line1/sensor/temp: temperature
+  factory/line1/robot/state: robot_mode

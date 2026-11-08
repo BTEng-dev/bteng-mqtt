@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bteng_mqtt"
+version = "0.1.0"
+description = "MQTT integration for the BTEng Behavior Tree engine"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+    "bteng>=0.3.2",   # first release requiring Python 3.12; behaviour floor is 0.3.0
+    "paho-mqtt>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+bteng-mqtt = "bteng_mqtt.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/BTEng-dev/bteng-mqtt"
+Repository = "https://github.com/BTEng-dev/bteng-mqtt"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+]
+# In-process broker for local integration runs; mosquitto is used when present.
+broker = [
+    "amqtt>=0.11",
+]
+dev = [
+    "bteng_mqtt[test]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["bteng_mqtt*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "broker: needs a live MQTT broker (BTENG_MQTT_BROKER, default 127.0.0.1:1883); skips when none is listening",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    "E501",   # line length handled separately
+    # UP042 fires only once target-version is py312: it wants
+    # MqttPayloadType(str, Enum) rewritten as enum.StrEnum. Deliberately not
+    # done. The class is public API (exported in __init__.__all__) and the two
+    # bases differ in str() and __format__, which cli.py:114 relies on when it
+    # formats a payload type into a fixed-width column. Converting is a
+    # behavioural change to a released type, not a lint fix; do it on purpose,
+    # with tests for the formatting paths, or not at all.
+    "UP042",
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true  # paho-mqtt and bteng stubs absent
+
+# StatefulActionNode guarantees on_start() runs (and sets self._future) before
+# on_running() is ever called, but that invariant lives in the base class and
+# mypy cannot see it — every `self._future.done()` reads as Optional access.
+# Suppress the narrow code here rather than adding unreachable None-guards.
+[[tool.mypy.overrides]]
+module = "bteng_mqtt.nodes.*"
+disable_error_code = ["union-attr"]

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tree: demo — one pass through every core MQTT node.
+
+  Run it with:
+      bteng-mqtt run examples/trees/demo_tree.xml -n examples/config/mqtt_config.yaml
+
+  Every topic here is an alias from that registry, so this file holds no broker
+  address, no topic string and no payload type. Change the broker and this tree
+  does not move.
+
+  Flow (Sequence — halts on the first FAILURE):
+    Connect → publish a retained state → subscribe (the broker replays the
+    retained message) → wait for the value → check it synchronously → Disconnect
+
+  Publishing retained and then subscribing is what makes this demo work against
+  any broker with nothing else running: the retained message is the traffic.
+-->
+<BTEng format_version="1.0" main_tree_to_execute="demo">
+  <Tree ID="demo">
+    <Sequence name="MqttDemo">
+
+      <MqttConnect name="Connect"
+                   client_id="demo" />
+
+      <!-- json payload_type with a value_map entry: the tree says "start",
+           the broker receives {"cmd": "start", "speed": 1.0} -->
+      <MqttPublish name="StartConveyor"
+                   client_id="demo"
+                   topic_alias="conveyor_cmd"
+                   value="start" />
+
+      <!-- retain="true" so the next node has something to receive -->
+      <MqttPublish name="PublishTemperature"
+                   client_id="demo"
+                   topic_alias="temperature"
+                   value="21.5"
+                   retain="true" />
+
+      <!-- The registry declares payload_type float, so the blackboard key
+           "temperature" gets 21.5, not the string "21.5" -->
+      <MqttSubscribe name="ReadTemperature"
+                     client_id="demo"
+                     topic_alias="temperature"
+                     timeout="5.0"
+                     persistent="true" />
+
+      <!-- Already satisfied by the cached value, so this settles on tick one -->
+      <MqttWaitForValue name="WarmEnough"
+                        client_id="demo"
+                        topic_alias="temperature"
+                        operator="ge"
+                        expected_value="20"
+                        timeout="5.0" />
+
+      <!-- Synchronous check against the latest cached value; it needs the
+           persistent="true" subscription above -->
+      <MqttCondition name="TemperatureIs21.5"
+                     client_id="demo"
+                     topic_alias="temperature"
+                     expected_value="21.5" />
+
+      <Sleep name="Settle"
+             duration="0.2" />
+
+      <MqttDisconnect name="Disconnect"
+                      client_id="demo" />
+
+    </Sequence>
+  </Tree>
+</BTEng>

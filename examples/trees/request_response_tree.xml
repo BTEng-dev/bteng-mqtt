@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tree: request_response — the MQTT stand-in for a method call.
+
+  This one needs a peer that answers. Start the bundled responder first:
+
+      python examples/demo_responder.py                     # in one shell
+      bteng-mqtt run examples/trees/request_response_tree.xml \
+                     -n examples/config/mqtt_config.yaml    # in another
+
+  The registry pairs the two topics, so the tree names one alias:
+
+      - alias: calibrate
+        topic: factory/line1/robot/req/calibrate
+        response_topic: factory/line1/robot/res/calibrate
+        response_payload_type: json
+        timeout: 10.0
+
+  MqttRequestResponse subscribes to the response topic *before* it publishes the
+  request, so a device that answers instantly cannot be missed. The first message
+  on the response topic is taken as the reply — MQTT 3.1.1 has no correlation
+  data, so give each caller its own response topic if several share a device.
+-->
+<BTEng format_version="1.0" main_tree_to_execute="request_response">
+  <Tree ID="request_response">
+    <Sequence name="MqttRequestResponseDemo">
+
+      <MqttConnect name="Connect"
+                   client_id="rr" />
+
+      <!-- The reply's "status" field lands on the blackboard under "state" -->
+      <MqttRequestResponse name="Calibrate"
+                           client_id="rr"
+                           topic_alias="calibrate"
+                           value='{"axis": 1, "speed": 0.5}'
+                           response_json_path="status"
+                           output_key="state"
+                           timeout="10.0" />
+
+      <CheckBlackboard name="CalibrationSucceeded"
+                       key="state"
+                       value="ok" />
+
+      <MqttDisconnect name="Disconnect"
+                      client_id="rr" />
+
+    </Sequence>
+  </Tree>
+</BTEng>

@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff mypy
+      - run: ruff check bteng_mqtt/ tests/
+      - run: mypy bteng_mqtt/ --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # bteng, paho-mqtt and pyyaml all resolve from PyPI.
+      - run: pip install -e .[test]
+      # No broker here: the broker-marked tests skip themselves.
+      - run: pytest tests/ -m "not broker" -q
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .[test]
+      - run: pip install amqtt
+      # mosquitto would need apt and root; amqtt is a pip package.
+      - name: Start a broker
+        run: |
+          cat > broker.yaml <<'YAML'
+          listeners:
+            default: {type: tcp, bind: 127.0.0.1:11883, max_connections: 50}
+          sys_interval: 0
+          auth: {allow-anonymous: true}
+          topic-check: {enabled: false}
+          YAML
+          amqtt -c broker.yaml &
+          for _ in $(seq 1 20); do
+            python -c "import socket,sys; s=socket.create_connection(('127.0.0.1',11883),1); s.close()" 2>/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "broker never came up" >&2; exit 1
+      - run: pytest tests/ -m broker -q
+        env:
+          BTENG_MQTT_BROKER: 127.0.0.1:11883
+      - name: Run the example trees end to end
+        run: |
+          sed 's/port: 1883/port: 11883/' examples/config/mqtt_config.yaml > ci_config.yaml
+          python examples/demo_responder.py --port 11883 &
+          sleep 2
+          bteng-mqtt run examples/trees/ -n ci_config.yaml --plain

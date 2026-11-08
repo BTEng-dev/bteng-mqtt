@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Tree: advanced — the batch, subscription-management and reconnect nodes.
+
+  Run it with:
+      bteng-mqtt run examples/trees/advanced_tree.xml -n examples/config/mqtt_config.yaml
+
+  Self-contained: it publishes its own retained traffic, so it needs nothing on
+  the broker but the broker itself.
+
+  Flow:
+    Connect
+    → BatchPublish three topics, retained, in one activation
+    → Subscribe to factory/line1/# so the broker replays those retained
+      messages and the latest-value cache fills for every topic
+    → BatchRead copies all three into the blackboard (temperature, part_count,
+      estop) with their declared types
+    → Condition checks one of them synchronously
+    → Unsubscribe drops the persistent subscription
+    → Reconnect (force) tears the connection down and rebuilds it from the
+      saved config
+    → Disconnect
+
+  Note on BatchRead: it reads the client manager's cache, not the network — MQTT
+  has no request/reply read — which is why the wildcard subscription above has
+  to come first.
+-->
+<BTEng format_version="1.0" main_tree_to_execute="advanced">
+  <Tree ID="advanced">
+    <Sequence name="MqttAdvancedDemo">
+
+      <MqttConnect name="Connect"
+                   client_id="adv" />
+
+      <SetBlackboard name="SetTemperature" key="temperature" value="19.5" />
+      <SetBlackboard name="SetPartCount"   key="part_count"  value="42" />
+      <SetBlackboard name="SetEstop"       key="estop"       value="false" />
+
+      <!-- Values are read from the blackboard keys named after each alias.
+           retain="true" applies to the whole batch. -->
+      <MqttBatchPublish name="PublishLineState"
+                        client_id="adv"
+                        topic_aliases="temperature,part_count,estop"
+                        retain="true" />
+
+      <!-- Wildcard subscription: the broker replays all three retained
+           messages, which is what fills the cache BatchRead needs. -->
+      <MqttSubscribe name="PrimeCache"
+                     client_id="adv"
+                     topic_alias="line1_all"
+                     timeout="5.0"
+                     persistent="true" />
+
+      <Sleep name="LetRetainedArrive" duration="0.3" />
+
+      <MqttBatchRead name="ReadLineState"
+                     client_id="adv"
+                     topic_aliases="temperature,part_count,estop"
+                     output_keys="temp_read,count_read,estop_read" />
+
+      <MqttCondition name="EstopIsClear"
+                     client_id="adv"
+                     topic_alias="estop"
+                     expected_value="false" />
+
+      <MqttUnsubscribe name="StopListening"
+                       client_id="adv"
+                       topic_alias="line1_all" />
+
+      <MqttReconnect name="Recycle"
+                     client_id="adv"
+                     force="true" />
+
+      <MqttDisconnect name="Disconnect"
+                      client_id="adv" />
+
+    </Sequence>
+  </Tree>
+</BTEng>
